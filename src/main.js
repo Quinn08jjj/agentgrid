@@ -23,18 +23,18 @@ const WEB_PRESETS = [
   ['Mistral Le Chat', 'https://chat.mistral.ai'],
 ];
 
-// Coding agents driven by an API key or a local model.
-// tool "claude"   = Claude Code pointed at an Anthropic-compatible endpoint
-// tool "opencode" = opencode pointed at an OpenAI-compatible endpoint
+// Providers reachable with an API key (or locally). Used for the chat windows and for opencode coding agents.
+// format "openai" = /chat/completions (default), "anthropic" = /v1/messages. Model ids are only defaults: the app lists the real ones from the API.
 const API_PRESETS = [
-  { id: 'kimi', label: 'Kimi (Moonshot)', tool: 'claude', baseUrl: 'https://api.moonshot.ai/anthropic', model: 'kimi-k2-turbo-preview' },
-  { id: 'deepseek', label: 'DeepSeek', tool: 'claude', baseUrl: 'https://api.deepseek.com/anthropic', model: 'deepseek-chat' },
-  { id: 'glm', label: 'GLM (Z.ai)', tool: 'claude', baseUrl: 'https://api.z.ai/api/anthropic', model: 'glm-4.6' },
-  { id: 'qwen', label: 'Qwen (Alibaba Model Studio)', tool: 'claude', baseUrl: 'https://dashscope-intl.aliyuncs.com/apps/anthropic', model: 'qwen3-coder-plus' },
-  { id: 'ollama', label: 'Local model (Ollama, no key)', tool: 'claude', baseUrl: 'http://localhost:11434', model: 'qwen2.5-coder:7b', noKey: true },
-  { id: 'grok', label: 'Grok (xAI, via opencode)', tool: 'opencode', baseUrl: 'https://api.x.ai/v1', model: 'grok-code-fast-1' },
-  { id: 'custom-anthropic', label: 'Custom Anthropic-compatible endpoint', tool: 'claude', baseUrl: 'https://', model: '', askUrl: true },
-  { id: 'custom-openai', label: 'Custom OpenAI-compatible endpoint (via opencode)', tool: 'opencode', baseUrl: 'https://', model: '', askUrl: true },
+  { id: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
+  { id: 'kimi', label: 'Kimi (Moonshot)', baseUrl: 'https://api.moonshot.ai/v1', model: 'kimi-k2-turbo-preview' },
+  { id: 'glm', label: 'GLM (Z.ai)', baseUrl: 'https://api.z.ai/api/paas/v4', model: 'glm-4.6' },
+  { id: 'qwen', label: 'Qwen (Alibaba Model Studio)', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
+  { id: 'grok', label: 'Grok (xAI)', baseUrl: 'https://api.x.ai/v1', model: 'grok-4' },
+  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1' },
+  { id: 'anthropic', label: 'Anthropic (API key)', format: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4-5' },
+  { id: 'ollama', label: 'Local model (Ollama, no key)', baseUrl: 'http://localhost:11434/v1', model: '', noKey: true },
+  { id: 'custom', label: 'Custom OpenAI-compatible endpoint', baseUrl: 'https://', model: '', askUrl: true },
 ];
 
 const NPM_PKG = { codex: '@openai/codex', opencode: 'opencode-ai' };
@@ -125,12 +125,8 @@ ipcMain.on('tile:cmd', (_e, { id, cmd, url }) => {
 });
 
 // ---------- Terminal tiles (Claude Code, Codex, opencode) ----------
-function agentCommand(kind, hasApi) {
-  if (kind === 'claude') {
-    // Claude Code's built-in prompt says "you are Claude"; for third-party models tell the model what it really is.
-    const flag = hasApi ? ' --append-system-prompt "$AGENTGRID_IDENTITY"' : '';
-    return `command -v claude >/dev/null 2>&1 || { echo "Claude Code is not installed. See https://claude.com/claude-code"; exit 127; }; claude${flag}`;
-  }
+function agentCommand(kind) {
+  if (kind === 'claude') return 'command -v claude >/dev/null 2>&1 || { echo "Claude Code is not installed. See https://claude.com/claude-code"; exit 127; }; claude';
   const bin = kind === 'codex' ? 'codex' : 'opencode';
   return `command -v ${bin} >/dev/null 2>&1 || { echo "Installing ${bin} into ~/.agentgrid/tools ..."; npm i --prefix "$HOME/.agentgrid/tools" ${NPM_PKG[bin]} || exit 1; }; ${bin}`;
 }
@@ -146,30 +142,20 @@ ipcMain.on('pty:start', (_e, t) => {
     fs.mkdirSync(configDir, { recursive: true });
     env[kind === 'codex' ? 'CODEX_HOME' : 'CLAUDE_CONFIG_DIR'] = configDir;
   }
-  if (t.api) {
+  if (t.api && kind === 'opencode') {
     const key = getKey(id) || (t.api.noKey ? 'local' : '');
-    if (kind === 'claude') {
-      delete env.ANTHROPIC_API_KEY;
-      env.AGENTGRID_IDENTITY = `You are running inside the Claude Code CLI, but the underlying model is "${t.api.model}" from provider "${t.api.label || t.api.provider}" (endpoint ${t.api.baseUrl}). You are not an Anthropic Claude model. If the user asks which model you are, say that.`;
-      Object.assign(env, {
-        ANTHROPIC_BASE_URL: t.api.baseUrl, ANTHROPIC_AUTH_TOKEN: key, ANTHROPIC_MODEL: t.api.model,
-        ANTHROPIC_DEFAULT_OPUS_MODEL: t.api.model, ANTHROPIC_DEFAULT_SONNET_MODEL: t.api.model, ANTHROPIC_DEFAULT_HAIKU_MODEL: t.api.model,
-        CLAUDE_CODE_SUBAGENT_MODEL: t.api.model, API_TIMEOUT_MS: '3000000', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-      });
-    } else {
-      const dataDir = path.join(HOME_DIR, 'opencode', id);
-      fs.mkdirSync(dataDir, { recursive: true });
-      env.XDG_DATA_HOME = path.join(dataDir, 'data'); env.XDG_STATE_HOME = path.join(dataDir, 'state'); // separate sessions per tile
-      env.AGENTGRID_API_KEY = key;
-      env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
-        $schema: 'https://opencode.ai/config.json',
-        provider: { grid: { npm: '@ai-sdk/openai-compatible', name: t.api.label || 'API', options: { baseURL: t.api.baseUrl, apiKey: '{env:AGENTGRID_API_KEY}' }, models: { [t.api.model]: { name: t.api.model } } } },
-        model: 'grid/' + t.api.model,
-      });
-    }
+    const dataDir = path.join(HOME_DIR, 'opencode', id);
+    fs.mkdirSync(dataDir, { recursive: true });
+    env.XDG_DATA_HOME = path.join(dataDir, 'data'); env.XDG_STATE_HOME = path.join(dataDir, 'state'); // separate sessions per tile
+    env.AGENTGRID_API_KEY = key;
+    env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+      $schema: 'https://opencode.ai/config.json',
+      provider: { grid: { npm: '@ai-sdk/openai-compatible', name: t.api.label || 'API', options: { baseURL: t.api.baseUrl, apiKey: '{env:AGENTGRID_API_KEY}' }, models: { [t.api.model]: { name: t.api.model } } } },
+      model: 'grid/' + t.api.model,
+    });
   }
   let dir = cwd; try { fs.accessSync(dir); } catch { dir = os.homedir(); }
-  const p = pty.spawn(process.env.SHELL || '/bin/zsh', ['-ilc', agentCommand(kind, !!t.api)], { name: 'xterm-256color', cols: cols || 100, rows: rows || 30, cwd: dir, env });
+  const p = pty.spawn(process.env.SHELL || '/bin/zsh', ['-ilc', agentCommand(kind)], { name: 'xterm-256color', cols: cols || 100, rows: rows || 30, cwd: dir, env });
   ptys.set(id, p);
   p.onData((data) => { if (win) win.webContents.send('pty:data', { id, data }); });
   p.onExit(({ exitCode }) => { ptys.delete(id); if (win) win.webContents.send('pty:exit', { id, exitCode }); });
@@ -179,6 +165,98 @@ ipcMain.on('pty:resize', (_e, { id, cols, rows }) => { try { ptys.get(id)?.resiz
 ipcMain.on('pty:kill', (_e, { id }) => { try { ptys.get(id)?.kill(); } catch {} ptys.delete(id); });
 app.on('before-quit', () => { for (const p of ptys.values()) try { p.kill(); } catch {} });
 
+// ---------- Chat windows: direct API calls, the key never leaves the main process ----------
+const chats = new Map();
+async function httpError(res) {
+  let body = ''; try { body = await res.text(); } catch {}
+  let msg = body; try { const j = JSON.parse(body); msg = j.error?.message || j.message || body; } catch {}
+  return new Error(`HTTP ${res.status}: ${String(msg).slice(0, 400)}`);
+}
+async function readSSE(res, onData) {
+  const dec = new TextDecoder(); let buf = '';
+  for await (const chunk of res.body) {
+    buf += dec.decode(chunk, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i).replace(/\r$/, ''); buf = buf.slice(i + 1); if (line.startsWith('data:')) onData(line.slice(5).trim()); }
+  }
+  if (buf.startsWith('data:')) onData(buf.slice(5).trim());
+}
+const trimUrl = (u) => u.replace(/\/+$/, '');
+async function streamChat(cfg, key, messages, signal, emit) {
+  if (cfg.format === 'anthropic') {
+    const res = await fetch(trimUrl(cfg.baseUrl) + '/v1/messages', {
+      method: 'POST', signal, headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: cfg.model, max_tokens: 8192, messages, stream: true }),
+    });
+    if (!res.ok) throw await httpError(res);
+    await readSSE(res, (d) => {
+      let j; try { j = JSON.parse(d); } catch { return; }
+      if (j.type === 'error') throw new Error(j.error?.message || 'stream error');
+      if (j.type === 'content_block_delta' && j.delta?.type === 'text_delta') emit({ text: j.delta.text });
+      if (j.type === 'content_block_delta' && j.delta?.type === 'thinking_delta') emit({ reasoning: j.delta.thinking });
+    });
+    return;
+  }
+  const res = await fetch(trimUrl(cfg.baseUrl) + '/chat/completions', {
+    method: 'POST', signal, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+    body: JSON.stringify({ model: cfg.model, messages, stream: true }),
+  });
+  if (!res.ok) throw await httpError(res);
+  await readSSE(res, (d) => {
+    if (d === '[DONE]') return;
+    let j; try { j = JSON.parse(d); } catch { return; }
+    if (j.error) throw new Error(j.error.message || 'stream error');
+    const dl = j.choices?.[0]?.delta || {};
+    if (dl.reasoning_content) emit({ reasoning: dl.reasoning_content });
+    if (dl.content) emit({ text: dl.content });
+  });
+}
+ipcMain.on('chat:send', async (_e, { id, cfg, messages }) => {
+  if (chats.has(id)) return;
+  const ac = new AbortController(); chats.set(id, ac);
+  const out = (ch, d) => win && win.webContents.send(ch, { id, ...d });
+  try {
+    const key = getKey(id) || (cfg.noKey ? 'local' : '');
+    if (!key) throw new Error('No API key stored for this window. Use ⋯ → settings.');
+    if (!cfg.model) throw new Error('No model set. Use ⋯ → settings.');
+    await streamChat(cfg, key, messages, ac.signal, (d) => out('chat:delta', d));
+    out('chat:done', {});
+  } catch (err) {
+    if (ac.signal.aborted) out('chat:done', { stopped: true });
+    else out('chat:error', { message: String(err.message || err) });
+  } finally { chats.delete(id); }
+});
+ipcMain.on('chat:stop', (_e, { id }) => chats.get(id)?.abort());
+ipcMain.handle('models:list', async (_e, { id, baseUrl, key, format }) => {
+  try {
+    key = key || (id ? getKey(id) : '');
+    const anth = format === 'anthropic';
+    const res = await fetch(trimUrl(baseUrl) + (anth ? '/v1/models' : '/models'), {
+      signal: AbortSignal.timeout(8000),
+      headers: anth ? { 'x-api-key': key, 'anthropic-version': '2023-06-01' } : key ? { authorization: 'Bearer ' + key } : {},
+    });
+    if (!res.ok) return { error: (await httpError(res)).message };
+    const j = await res.json();
+    const ids = (j.data || j.models || []).map((m) => m.id || m.name).filter(Boolean).sort();
+    return { models: ids };
+  } catch (e) { return { error: String(e.message || e) }; }
+});
+ipcMain.handle('presets:get', () => API_PRESETS);
+
+ipcMain.on('menu:tile', (e, { id, type }) => {
+  const act = (action) => () => e.sender.send('tile:menu', { id, action });
+  const common = [
+    { label: 'Rename', click: act('rename') },
+    { label: 'Text larger', click: act('zin') }, { label: 'Text smaller', click: act('zout') },
+    { type: 'separator' }, { label: 'Hide window', click: act('hide') },
+  ];
+  const own = type === 'chat' ? [{ label: 'New chat (clear)', click: act('clear') }, { label: 'Settings (model / key / url)…', click: act('cfg') }]
+    : type === 'agent' ? [{ label: 'Restart', click: act('restart') }, { label: 'Settings (model / key / url)…', click: act('cfg') }]
+    : type === 'term' ? [{ label: 'Restart', click: act('restart') }]
+    : [{ label: 'Back', click: act('back') }, { label: 'Reload', click: act('reload') }, { label: 'Home', click: act('home') }, { label: 'Open in browser', click: act('ext') }];
+  Menu.buildFromTemplate([...own, { type: 'separator' }, ...common]).popup({ window: win });
+});
+
 // ---------- misc IPC ----------
 ipcMain.handle('state:load', () => { try { return JSON.parse(fs.readFileSync(stateFile(), 'utf8')); } catch { return null; } });
 ipcMain.on('state:save', (_e, s) => { try { fs.writeFileSync(stateFile(), JSON.stringify(s)); } catch {} });
@@ -187,13 +265,13 @@ ipcMain.handle('pickFolder', async (_e, label) => {
   const f = await dialog.showOpenDialog(win, { title: `Project folder for ${label}`, properties: ['openDirectory', 'createDirectory'], defaultPath: app.getPath('home') });
   return f.canceled ? null : f.filePaths[0];
 });
-ipcMain.handle('tile:remove', async (_e, { id, name, term }) => {
+ipcMain.handle('tile:remove', async (_e, { id, name, term, chat }) => {
   const r = await dialog.showMessageBox(win, {
     type: 'question', buttons: ['Remove', 'Cancel'], cancelId: 1, defaultId: 1, message: `Remove "${name}"?`,
-    detail: term ? 'The terminal is closed. Its login folder is kept on disk.' : 'The login of this tile is deleted.',
+    detail: chat ? 'The chat history and the stored API key of this window are deleted.' : term ? 'The terminal is closed. Its login folder is kept on disk.' : 'The login of this tile is deleted.',
   });
   if (r.response === 1) return false;
-  if (term) { try { setKey(id, ''); } catch {} }
+  if (term || chat) { try { setKey(id, ''); } catch {} chats.get(id)?.abort(); }
   else { try { await session.fromPartition(partitionOf(id)).clearStorageData(); } catch {} }
   return true;
 });
@@ -212,11 +290,13 @@ async function askAccount(e, kind) {
 }
 
 ipcMain.on('menu:add', (e, { x, y }) => {
+  const withHome = (p) => ({ ...p, home: HOME_DIR });
   const tpl = [
+    { label: 'Chat via API key', submenu: API_PRESETS.map((p) => ({ label: p.label, click: () => e.sender.send('tile:addChat', withHome(p)) })) },
+    { label: 'Coding agent via API key (opencode)', submenu: API_PRESETS.filter((p) => p.id !== 'anthropic').map((p) => ({ label: p.label, click: () => e.sender.send('tile:addApi', withHome(p)) })) },
+    { type: 'separator' },
     { label: 'Claude Code (subscription login)', click: () => askAccount(e, 'claude') },
     { label: 'Codex (ChatGPT login)', click: () => askAccount(e, 'codex') },
-    { type: 'separator' },
-    { label: 'Coding agent via API key / local model', submenu: API_PRESETS.map((p) => ({ label: p.label, click: () => e.sender.send('tile:addApi', { ...p, home: HOME_DIR }) })) },
     { type: 'separator' },
     { label: 'Website (chat)', submenu: [
       ...WEB_PRESETS.map(([name, url]) => ({ label: name, click: () => e.sender.send('tile:add', { name, url }) })),

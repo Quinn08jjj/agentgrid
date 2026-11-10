@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('grid', {
   addMenu: (p) => ipcRenderer.send('menu:add', p),
   remove: (p) => ipcRenderer.invoke('tile:remove', p),
   setKey: (p) => ipcRenderer.send('key:set', p),
+  chat: { send: (p) => ipcRenderer.send('chat:send', p), stop: (p) => ipcRenderer.send('chat:stop', p) },
+  models: (p) => ipcRenderer.invoke('models:list', p),
+  presets: () => ipcRenderer.invoke('presets:get'),
+  tileMenu: (p) => ipcRenderer.send('menu:tile', p),
   pickFolder: (l) => ipcRenderer.invoke('pickFolder', l),
   pty: {
     start: (p) => ipcRenderer.send('pty:start', p),
