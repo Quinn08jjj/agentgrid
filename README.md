@@ -1,5 +1,10 @@
 # AgentGrid
 
+[![Release](https://img.shields.io/github/v/release/Quinn08jjj/agentgrid?color=white&labelColor=black)](https://github.com/Quinn08jjj/agentgrid/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/Quinn08jjj/agentgrid/ci.yml?label=ci&labelColor=black)](https://github.com/Quinn08jjj/agentgrid/actions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-white?labelColor=black)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-macOS-white?labelColor=black)
+
 **Run many AI coding agents side by side — each with its own account.**
 Claude Code, Codex and chat windows for DeepSeek, Kimi, GLM, Qwen, Grok, OpenAI, Anthropic and local Ollama models in one minimal black-and-white tiling workspace for macOS. No logging out, no account switching, no extra VS Code windows.
 
