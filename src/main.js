@@ -128,7 +128,11 @@ ipcMain.on('tile:cmd', (_e, { id, cmd, url }) => {
 function agentCommand(kind) {
   if (kind === 'claude') return 'command -v claude >/dev/null 2>&1 || { echo "Claude Code is not installed. See https://claude.com/claude-code"; exit 127; }; claude';
   const bin = kind === 'codex' ? 'codex' : 'opencode';
-  return `command -v ${bin} >/dev/null 2>&1 || { echo "Installing ${bin} into ~/.agentgrid/tools ..."; npm i --prefix "$HOME/.agentgrid/tools" ${NPM_PKG[bin]} || exit 1; }; ${bin}`;
+  const install = `command -v ${bin} >/dev/null 2>&1 || { echo "Installing ${bin} into ~/.agentgrid/tools ..."; npm i --prefix "$HOME/.agentgrid/tools" ${NPM_PKG[bin]} || exit 1; }`;
+  // opencode >= 2 shares one background service (fixed port) between all instances, which breaks parallel windows.
+  // --standalone gives every window its own private server; older versions don't know the flag.
+  if (bin === 'opencode') return `${install}; F=""; opencode --help 2>&1 | grep -q -- "--standalone" && F="--standalone"; opencode $F`;
+  return `${install}; ${bin}`;
 }
 
 ipcMain.on('pty:start', (_e, t) => {
