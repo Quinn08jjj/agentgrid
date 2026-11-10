@@ -1,0 +1,16 @@
+{
+  "name": "agentgrid-launcher",
+  "displayName": "AgentGrid Launcher",
+  "description": "Open AgentGrid from VS Code with Cmd+Shift+D.",
+  "version": "0.1.0",
+  "publisher": "agentgrid",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [{ "command": "agentgrid.open", "title": "AgentGrid: Open" }],
+    "keybindings": [{ "command": "agentgrid.open", "key": "ctrl+shift+d", "mac": "cmd+shift+d" }]
+  }
+}

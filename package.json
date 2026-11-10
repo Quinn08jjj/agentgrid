@@ -1,0 +1,47 @@
+{
+  "name": "agentgrid",
+  "productName": "AgentGrid",
+  "version": "0.1.0",
+  "description": "Run many Claude Code, Codex, Kimi, DeepSeek, GLM, Qwen and Ollama coding agents side by side, each with its own account. A minimal tiling terminal for macOS.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/renderer.js",
+    "build": "electron-packager . AgentGrid --platform=darwin --arch=arm64 --out=dist --overwrite --ignore=\"^/(dist|docs|vscode|\\.github)\" --asar.unpackDir=node_modules/node-pty",
+    "postinstall": "node scripts/fix-pty-perms.js"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "multi-account",
+    "ai-agents",
+    "coding-agents",
+    "terminal",
+    "tiling",
+    "electron",
+    "kimi",
+    "deepseek",
+    "glm",
+    "qwen",
+    "ollama",
+    "opencode"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Quinn08jjj/agentgrid.git"
+  },
+  "homepage": "https://github.com/Quinn08jjj/agentgrid",
+  "bugs": {
+    "url": "https://github.com/Quinn08jjj/agentgrid/issues"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.2.3"
+  }
+}

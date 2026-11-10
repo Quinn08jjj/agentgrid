@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>AgentGrid</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<div id="bar">
+  <div class="drag"></div>
+  <span class="brand">agentgrid</span>
+  <button id="add">+ new</button>
+  <label class="grp">cols <select id="cols"><option value="0">auto</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+  <span id="chips"></span>
+  <button id="restoreAll" hidden>show all</button>
+</div>
+<div id="grid"></div>
+<div id="empty" hidden><pre>no windows.
+
+each window is a real terminal or website
+with its own isolated login.
+
+  claude code · codex · kimi · deepseek
+  glm · qwen · grok · ollama · any site</pre><button id="add2">+ new window</button></div>
+<div id="modal" hidden><form id="mform"><h3 id="mtitle"></h3><div id="mfields"></div><div class="row"><button type="button" id="mcancel">cancel</button><button type="submit">ok</button></div></form></div>
+<script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+<script src="renderer.js"></script>
+</body></html>
