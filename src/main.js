@@ -125,9 +125,11 @@ ipcMain.on('tile:cmd', (_e, { id, cmd, url }) => {
 });
 
 // ---------- Terminal tiles (Claude Code, Codex, opencode) ----------
-function agentCommand(kind) {
+function agentCommand(kind, hasApi) {
   if (kind === 'claude') {
-    return 'command -v claude >/dev/null 2>&1 || { echo "Claude Code is not installed. See https://claude.com/claude-code"; exit 127; }; claude';
+    // Claude Code's built-in prompt says "you are Claude"; for third-party models tell the model what it really is.
+    const flag = hasApi ? ' --append-system-prompt "$AGENTGRID_IDENTITY"' : '';
+    return `command -v claude >/dev/null 2>&1 || { echo "Claude Code is not installed. See https://claude.com/claude-code"; exit 127; }; claude${flag}`;
   }
   const bin = kind === 'codex' ? 'codex' : 'opencode';
   return `command -v ${bin} >/dev/null 2>&1 || { echo "Installing ${bin} into ~/.agentgrid/tools ..."; npm i --prefix "$HOME/.agentgrid/tools" ${NPM_PKG[bin]} || exit 1; }; ${bin}`;
@@ -148,6 +150,7 @@ ipcMain.on('pty:start', (_e, t) => {
     const key = getKey(id) || (t.api.noKey ? 'local' : '');
     if (kind === 'claude') {
       delete env.ANTHROPIC_API_KEY;
+      env.AGENTGRID_IDENTITY = `You are running inside the Claude Code CLI, but the underlying model is "${t.api.model}" from provider "${t.api.label || t.api.provider}" (endpoint ${t.api.baseUrl}). You are not an Anthropic Claude model. If the user asks which model you are, say that.`;
       Object.assign(env, {
         ANTHROPIC_BASE_URL: t.api.baseUrl, ANTHROPIC_AUTH_TOKEN: key, ANTHROPIC_MODEL: t.api.model,
         ANTHROPIC_DEFAULT_OPUS_MODEL: t.api.model, ANTHROPIC_DEFAULT_SONNET_MODEL: t.api.model, ANTHROPIC_DEFAULT_HAIKU_MODEL: t.api.model,
@@ -166,7 +169,7 @@ ipcMain.on('pty:start', (_e, t) => {
     }
   }
   let dir = cwd; try { fs.accessSync(dir); } catch { dir = os.homedir(); }
-  const p = pty.spawn(process.env.SHELL || '/bin/zsh', ['-ilc', agentCommand(kind)], { name: 'xterm-256color', cols: cols || 100, rows: rows || 30, cwd: dir, env });
+  const p = pty.spawn(process.env.SHELL || '/bin/zsh', ['-ilc', agentCommand(kind, !!t.api)], { name: 'xterm-256color', cols: cols || 100, rows: rows || 30, cwd: dir, env });
   ptys.set(id, p);
   p.onData((data) => { if (win) win.webContents.send('pty:data', { id, data }); });
   p.onExit(({ exitCode }) => { ptys.delete(id); if (win) win.webContents.send('pty:exit', { id, exitCode }); });

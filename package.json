@@ -1,7 +1,7 @@
 {
   "name": "agentgrid",
   "productName": "AgentGrid",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Run many Claude Code, Codex, Kimi, DeepSeek, GLM, Qwen and Ollama coding agents side by side, each with its own account. A minimal tiling terminal for macOS.",
   "main": "src/main.js",
   "scripts": {
