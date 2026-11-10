@@ -14,20 +14,25 @@ input:focus, select:focus { border-color:var(--hi); }
 #chips { display:flex; gap:6px; overflow-x:auto; }
 .chip { border:1px solid var(--line); padding:0 8px; cursor:pointer; white-space:nowrap; color:var(--dim); }
 .chip:hover { background:var(--hi); color:#000; }
-#grid { position:absolute; top:40px; left:0; right:0; bottom:0; display:grid; gap:0; padding:0; }
-.gut { z-index:5; background:transparent; }
-.gut:hover, .gut.drag { background:var(--hi); }
-.gut.v { cursor:col-resize; grid-row:1 / -1; }
-.gut.h { cursor:row-resize; grid-column:1 / -1; }
+#grid { position:absolute; top:40px; left:0; right:0; bottom:0; overflow:hidden; }
 #grid.dragging { user-select:none; }
-.tile { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border:1px solid var(--line); background:#000; }
-.th { height:26px; flex:none; display:flex; align-items:center; gap:0; padding:0 0 0 10px; border-bottom:1px solid var(--line); }
+/* each tile has its own box; 5px padding hosts the resize handles so native web views never cover them */
+.tile { position:absolute; padding:5px; }
+.tile .in { display:flex; flex-direction:column; height:100%; min-width:0; min-height:0; overflow:hidden; border:1px solid var(--line); background:#000; }
+.tile.active .in { border-color:var(--hi); }
+.rz { position:absolute; z-index:6; background:transparent; }
+.rz.n, .rz.s { left:12px; right:12px; height:5px; cursor:ns-resize; } .rz.n { top:0; } .rz.s { bottom:0; }
+.rz.e, .rz.w { top:12px; bottom:12px; width:5px; cursor:ew-resize; } .rz.e { right:0; } .rz.w { left:0; }
+.rz.ne, .rz.nw, .rz.se, .rz.sw { width:12px; height:12px; } .rz.ne { top:0; right:0; cursor:nesw-resize; } .rz.nw { top:0; left:0; cursor:nwse-resize; }
+.rz.se { bottom:0; right:0; cursor:nwse-resize; } .rz.sw { bottom:0; left:0; cursor:nesw-resize; }
+.rz:hover { background:var(--hi); opacity:.6; }
+.th { cursor:grab; height:26px; flex:none; display:flex; align-items:center; gap:0; padding:0 0 0 10px; border-bottom:1px solid var(--line); }
 .th .ld { width:6px; height:6px; background:var(--hi); margin-right:8px; opacity:0; flex:none; }
 .th .ld.on { opacity:1; animation:b 1s steps(2) infinite; }
 @keyframes b { 50% { opacity:0; } }
 .th .nm { color:var(--hi); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:text; flex:0 1 auto; max-width:45%; }
 .th .pg { flex:1; color:var(--dim); margin-left:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.th button { border:0; padding:3px 7px; color:var(--dim); }
+.th button { cursor:pointer; border:0; padding:3px 7px; color:var(--dim); }
 .th button:hover { background:var(--hi); color:#000; }
 .body { flex:1; min-height:0; }
 .body.term { padding:4px 0 0 6px; background:#000; }

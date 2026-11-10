@@ -3,7 +3,7 @@
 **Run many AI coding agents side by side — each with its own account.**
 Claude Code, Codex, Kimi, DeepSeek, GLM, Qwen, Grok and local Ollama models in one minimal black-and-white tiling terminal for macOS. No logging out, no account switching, no extra VS Code windows.
 
-![AgentGrid with Claude Code, Codex and a local model side by side](docs/screenshot.png)
+![AgentGrid with five agent windows in individual sizes: a local model, Codex, DeepSeek, Claude Code and Grok](docs/screenshot.png)
 
 ## Why
 
@@ -19,7 +19,8 @@ AgentGrid gives every window its **own isolated login** and lets you drag them i
 - **Real tools, not look-alikes** — each tile is the actual `claude`, `codex` or `opencode` CLI in a real pty (xterm.js), working in the project folder you choose.
 - **Any provider as a coding agent** — Kimi, DeepSeek, GLM, Qwen and Ollama run through Claude Code against their Anthropic-compatible endpoints; Grok and any OpenAI-compatible endpoint run through [opencode](https://opencode.ai).
 - **Chat websites as tiles too** — Claude, ChatGPT, Kimi, Qwen, DeepSeek, GLM, Gemini, Grok, Perplexity, Le Chat or any URL. Every site tile has its own persistent cookie jar, so the same site can be open with several accounts.
-- **Drag-to-resize** tiles, auto grid or fixed column count, maximize/hide per tile, per-tile zoom.
+- **Free-form windows** — drag a title bar to move a window, drag any edge or corner to resize it, independently of all others. Windows snap to neighbours and borders and never overlap. One click re-tiles everything into a grid.
+- Maximize/hide per window, per-window text zoom, auto grid or fixed column count.
 - **Keys stay local** — API keys are encrypted with the macOS keychain (Electron `safeStorage`). No telemetry, no server.
 - Minimal by design: black, white, monospace.
 
@@ -60,7 +61,7 @@ Requirements: macOS, Node 20+ (source builds). Claude Code must be installed for
 1. Click **+ new** and pick an agent.
 2. For Claude Code / Codex choose *New separate login* (own folder → own account) or *Existing login*, then pick the project folder.
 3. For API providers enter model and key, then pick the project folder.
-4. Drag the lines between tiles to resize. Double-click a tile name to rename it.
+4. Drag a window's title bar to move it, its edges or corners to resize it. **tile** re-arranges everything into a grid. Double-click a name to rename it.
 
 ### Open it from VS Code
 

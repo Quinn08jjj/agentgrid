@@ -10,7 +10,7 @@
   const terms = {};
   const uid = () => Math.random().toString(36).slice(2, 8);
   const isTerm = (t) => t.kind === 'term';
-  const save = () => api.save({ tiles: S.tiles.map(({ _c, _r, _span, ...t }) => t), cols: S.cols, fr: S.fr });
+  const save = () => api.save({ tiles: S.tiles, cols: S.cols, auto: S.auto });
   const TOOL = { claude: 'claude code', codex: 'codex', opencode: 'opencode' };
 
   // ---------- terminals ----------
@@ -45,44 +45,121 @@
     new ResizeObserver(doFit).observe(body);
   }
 
-  // ---------- layout ----------
+  // ---------- layout (free-form: every tile has its own box, in fractions of the area) ----------
+  const EPS = 0.0005;
+  const overlap = (a, b) => a.x < b.x + b.w - EPS && a.x + a.w > b.x + EPS && a.y < b.y + b.h - EPS && a.y + a.h > b.y + EPS;
+  const visibleTiles = () => S.tiles.filter((t) => !hidden.has(t.id) && (!max || t.id === max));
+
+  function arrange(vis) {
+    const n = vis.length || 1;
+    const nc = Math.min(S.cols || (n <= 2 ? n : Math.ceil(Math.sqrt(n))), n);
+    const nr = Math.ceil(n / nc);
+    vis.forEach((t, i) => {
+      const r = Math.floor(i / nc), cnt = Math.min(nc, n - r * nc), c = i - r * nc;
+      t.box = { x: c / cnt, y: r / nr, w: 1 / cnt, h: 1 / nr };
+    });
+    S.auto = true;
+  }
+  // Tiles without a box: re-tile everything while the user never customized, else split the largest tile.
+  function ensureBoxes(vis) {
+    const sig = vis.map((t) => t.id).join(',');
+    if (S.auto !== false && (S.sig !== sig || vis.some((t) => !t.box))) { arrange(vis); S.sig = sig; return; }
+    for (const t of vis) {
+      if (t.box) continue;
+      const placed = vis.filter((x) => x.box);
+      if (!placed.length) { t.box = { x: 0, y: 0, w: 1, h: 1 }; continue; }
+      const big = placed.reduce((m, x) => (x.box.w * x.box.h > m.box.w * m.box.h ? x : m));
+      const bx = big.box;
+      if (bx.w * grid.clientWidth >= bx.h * grid.clientHeight) { const h = bx.w / 2; t.box = { x: bx.x + h, y: bx.y, w: h, h: bx.h }; big.box = { ...bx, w: h }; }
+      else { const h = bx.h / 2; t.box = { x: bx.x, y: bx.y + h, w: bx.w, h }; big.box = { ...bx, h }; }
+    }
+    S.sig = sig;
+  }
+
+  function place(el, t) {
+    const b = max ? { x: 0, y: 0, w: 1, h: 1 } : t.box;
+    el.style.left = b.x * 100 + '%'; el.style.top = b.y * 100 + '%'; el.style.width = b.w * 100 + '%'; el.style.height = b.h * 100 + '%';
+  }
+
   function render() {
     grid.innerHTML = '';
     $('#cols').value = String(S.cols || 0);
-    const vis = S.tiles.filter((t) => !hidden.has(t.id) && (!max || t.id === max));
+    const vis = visibleTiles();
     $('#empty').hidden = S.tiles.length > 0;
-    const n = vis.length || 1;
-    const nc = Math.min(max ? 1 : S.cols || (n <= 2 ? n : Math.ceil(Math.sqrt(n))), n);
-    const nr = Math.ceil(n / nc);
-    const sig = nc + 'x' + nr;
-    if (S.fr?.sig !== sig) S.fr = { sig, c: Array(nc).fill(1), r: Array(nr).fill(1) };
-    const tr = (arr) => arr.map((f) => `minmax(0,${f}fr)`).join(' 5px ');
-    grid.style.gridTemplateColumns = tr(S.fr.c);
-    grid.style.gridTemplateRows = tr(S.fr.r);
-    vis.forEach((t, i) => { t._c = i % nc; t._r = Math.floor(i / nc); t._span = i === vis.length - 1 && nc - t._c > 1; });
-    for (let i = 0; i < nc - 1; i++) addGutter('v', i);
-    for (let j = 0; j < nr - 1; j++) addGutter('h', j);
+    ensureBoxes(vis);
 
     for (const t of vis) {
       const el = document.createElement('div');
       el.className = 'tile'; el.dataset.id = t.id;
-      el.style.gridColumn = t._span ? `${t._c * 2 + 1} / -1` : `${t._c * 2 + 1}`;
-      el.style.gridRow = `${t._r * 2 + 1}`;
+      place(el, t);
       const nav = isTerm(t)
         ? `<button data-c="restart" title="restart">↻</button>${t.api ? '<button data-c="cfg" title="model / key">⚙</button>' : ''}`
         : '<button data-c="back" title="back">←</button><button data-c="reload" title="reload">↻</button><button data-c="home" title="home">⌂</button>';
-      el.innerHTML = `<div class="th"><span class="ld"></span><span class="nm" title="double-click to rename"></span><span class="pg"></span>${nav}
-        <button data-c="zout" title="smaller">−</button><button data-c="zin" title="larger">+</button>${isTerm(t) ? '' : '<button data-c="ext" title="open in browser">↗</button>'}
-        <button data-c="min" title="hide">_</button><button data-c="max" title="${max ? 'restore' : 'maximize'}">${max ? '▫' : '□'}</button><button data-c="close" title="remove">×</button></div><div class="body"></div>`;
+      el.innerHTML = `<div class="in"><div class="th"><span class="ld"></span><span class="nm" title="double-click to rename · drag the bar to move"></span><span class="pg"></span>${nav}
+        <button data-c="zout" title="smaller text">−</button><button data-c="zin" title="larger text">+</button>${isTerm(t) ? '' : '<button data-c="ext" title="open in browser">↗</button>'}
+        <button data-c="min" title="hide">_</button><button data-c="max" title="${max ? 'restore' : 'maximize'}">${max ? '▫' : '□'}</button><button data-c="close" title="remove">×</button></div><div class="body"></div></div>`
+        + (max ? '' : ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map((d) => `<i class="rz ${d}" data-d="${d}"></i>`).join(''));
       el.querySelector('.nm').textContent = t.name;
       el.querySelector('.nm').ondblclick = () => rename(t);
       if (isTerm(t)) el.querySelector('.pg').textContent = (t.api ? t.api.model + ' · ' : '') + TOOL[t.cmd] + ' · ' + t.cwd;
       el.querySelector('.th').addEventListener('click', (e) => onHeaderClick(e, t));
+      if (!max) {
+        el.querySelector('.th').onpointerdown = (e) => { if (e.target.closest('button')) return; startDrag(e, t, el, 'move', e.currentTarget); };
+        el.querySelectorAll('.rz').forEach((h) => { h.onpointerdown = (e) => startDrag(e, t, el, h.dataset.d, h); });
+      }
       grid.appendChild(el);
       if (isTerm(t)) mountTerm(t, el.querySelector('.body')); else paintInfo(t.id);
     }
     chips();
     push();
+  }
+
+  // Move (drag the title bar) or resize (drag an edge/corner). Snaps to other tiles and the borders, never overlaps.
+  function startDrag(e, t, el, mode, handle) {
+    e.preventDefault(); handle.setPointerCapture(e.pointerId);
+    dragging = true; el.classList.add('active'); push();
+    const W = grid.clientWidth, H = grid.clientHeight;
+    const start = { ...t.box }, px = e.clientX, py = e.clientY;
+    const others = visibleTiles().filter((x) => x.id !== t.id).map((x) => x.box);
+    const thr = 8;
+    const xs = [0, 1, ...others.flatMap((o) => [o.x, o.x + o.w])], ys = [0, 1, ...others.flatMap((o) => [o.y, o.y + o.h])];
+    const snap = (v, lines, size) => { for (const l of lines) if (Math.abs(v - l) * size < thr) return l; return v; };
+    const minW = 150 / W, minH = 90 / H;
+    let last = { ...start };
+    handle.onpointermove = (ev) => {
+      const dx = (ev.clientX - px) / W, dy = (ev.clientY - py) / H;
+      let { x, y, w, h } = start;
+      if (mode === 'move') {
+        x = Math.min(1 - w, Math.max(0, x + dx)); y = Math.min(1 - h, Math.max(0, y + dy));
+        const sx = snap(x, xs, W), sr = snap(x + w, xs, W); x = sx !== x ? sx : sr !== x + w ? sr - w : x;
+        const sy = snap(y, ys, H), sb = snap(y + h, ys, H); y = sy !== y ? sy : sb !== y + h ? sb - h : y;
+      } else {
+        let l = x, r = x + w, tp = y, bt = y + h;
+        if (mode.includes('w')) l = Math.min(r - minW, Math.max(0, snap(l + dx, xs, W)));
+        if (mode.includes('e')) r = Math.max(l + minW, Math.min(1, snap(r + dx, xs, W)));
+        if (mode.includes('n')) tp = Math.min(bt - minH, Math.max(0, snap(tp + dy, ys, H)));
+        if (mode.includes('s')) bt = Math.max(tp + minH, Math.min(1, snap(bt + dy, ys, H)));
+        x = l; y = tp; w = r - l; h = bt - tp;
+      }
+      const cand = { x, y, w, h };
+      // collision: try the full move, then each axis alone so the tile can slide along neighbours
+      const free = (b) => !others.some((o) => overlap(b, o));
+      const lerp = (a, b, k) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, w: a.w + (b.w - a.w) * k, h: a.h + (b.h - a.h) * k });
+      const toward = (from, to) => { if (free(to)) return to; let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; if (free(lerp(from, to, mid))) lo = mid; else hi = mid; } return lerp(from, to, lo); };
+      let use = toward(last, cand); // stop exactly at the neighbour instead of refusing the move
+      if (mode === 'move' && use !== cand) {
+        // slide along a neighbour: try each axis on its own
+        const sx = toward(last, { ...cand, y: last.y }), sy = toward(last, { ...cand, x: last.x });
+        use = Math.abs(sx.x - last.x) >= Math.abs(sy.y - last.y) ? sx : sy;
+      }
+      if (!use) return;
+      use = { x: Math.max(0, use.x), y: Math.max(0, use.y), w: use.w, h: use.h };
+      last = use; t.box = use; place(el, t);
+    };
+    handle.onpointerup = () => {
+      handle.onpointermove = handle.onpointerup = null; el.classList.remove('active'); dragging = false;
+      S.auto = false; save(); push();
+    };
   }
 
   function onHeaderClick(e, t) {
@@ -102,28 +179,6 @@
       if (isTerm(t)) { api.pty.kill({ id: t.id }); terms[t.id]?.term.dispose(); delete terms[t.id]; }
       S.tiles = S.tiles.filter((x) => x.id !== t.id); hidden.delete(t.id); if (max === t.id) max = null; save(); render();
     });
-  }
-
-  function addGutter(dir, i) {
-    const g = document.createElement('div');
-    g.className = 'gut ' + dir;
-    if (dir === 'v') g.style.gridColumn = String(i * 2 + 2); else g.style.gridRow = String(i * 2 + 2);
-    g.onpointerdown = (e) => {
-      e.preventDefault(); g.setPointerCapture(e.pointerId); g.classList.add('drag'); dragging = true; grid.classList.add('dragging'); push();
-      const arr = dir === 'v' ? S.fr.c : S.fr.r;
-      const total = arr.reduce((a, b) => a + b, 0);
-      const px = (dir === 'v' ? grid.clientWidth : grid.clientHeight) - 5 * (arr.length - 1);
-      const start = dir === 'v' ? e.clientX : e.clientY, a0 = arr[i], b0 = arr[i + 1];
-      g.onpointermove = (ev) => {
-        const d = ((dir === 'v' ? ev.clientX : ev.clientY) - start) / px * total;
-        const min = total * 0.08;
-        const na = Math.min(a0 + b0 - min, Math.max(min, a0 + d));
-        arr[i] = na; arr[i + 1] = a0 + b0 - na;
-        grid.style[dir === 'v' ? 'gridTemplateColumns' : 'gridTemplateRows'] = arr.map((f) => `minmax(0,${f}fr)`).join(' 5px ');
-      };
-      g.onpointerup = () => { g.onpointermove = g.onpointerup = null; g.classList.remove('drag'); grid.classList.remove('dragging'); dragging = false; save(); push(); };
-    };
-    grid.appendChild(g);
   }
 
   function paintInfo(id) {
@@ -221,7 +276,9 @@
 
   $('#add').onclick = (e) => { const r = e.target.getBoundingClientRect(); api.addMenu({ x: r.left, y: r.bottom }); };
   $('#add2').onclick = () => api.addMenu({ x: innerWidth / 2 - 60, y: innerHeight / 2 });
-  $('#cols').onchange = (e) => { S.cols = +e.target.value; save(); render(); };
+  const retile = () => { visibleTiles().forEach((t) => delete t.box); S.auto = true; S.sig = ''; save(); render(); };
+  $('#cols').onchange = (e) => { S.cols = +e.target.value; retile(); };
+  $('#tile').onclick = retile;
   $('#restoreAll').onclick = () => { hidden.clear(); max = null; render(); };
   api.on('tile:add', ({ name, url }) => addWeb(name, url));
   api.on('tile:addTerm', addTerm);
