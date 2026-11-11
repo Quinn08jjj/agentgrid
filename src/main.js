@@ -116,6 +116,11 @@ ipcMain.on('sync', (_e, { tiles, ids }) => {
   }
 });
 
+ipcMain.handle('tile:snap', async (_e, id) => {
+  const v = views.get(id); if (!v) return null;
+  try { const img = await v.webContents.capturePage(); return 'data:image/jpeg;base64,' + img.toJPEG(70).toString('base64'); } catch { return null; }
+});
+
 ipcMain.on('tile:cmd', (_e, { id, cmd, url }) => {
   const wc = views.get(id)?.webContents; if (!wc) return;
   if (cmd === 'reload') wc.reload();

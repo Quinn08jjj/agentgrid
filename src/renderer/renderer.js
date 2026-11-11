@@ -165,6 +165,21 @@
     el.style.left = box.x * 100 + '%'; el.style.top = box.y * 100 + '%'; el.style.width = box.w * 100 + '%'; el.style.height = box.h * 100 + '%';
   }
 
+  // cheap re-layout: just move the existing elements (no remount, no black flash)
+  function relayout() {
+    for (const t of visibleTiles()) { const el = grid.querySelector(`.tile[data-id="${t.id}"]`); if (el) place(el, max ? { x: 0, y: 0, w: 1, h: 1 } : t.box); }
+    renderDock(); push();
+  }
+  // web views are native and cannot follow the DOM while dragging: show a snapshot instead of a black hole
+  async function freezeWeb() {
+    await Promise.all(S.tiles.filter((t) => !isTerm(t) && !isChat(t)).map(async (t) => {
+      const body = grid.querySelector(`.tile[data-id="${t.id}"] .body`); if (!body) return;
+      const url = await api.snap(t.id); if (url && dragging) { body.style.backgroundImage = `url(${url})`; body.classList.add('frozen'); }
+    }));
+    if (dragging) push();
+  }
+  function thawWeb() { setTimeout(() => grid.querySelectorAll('.body.frozen').forEach((b) => { b.classList.remove('frozen'); b.style.backgroundImage = ''; }), 80); }
+
   function render() {
     grid.innerHTML = '';
     $('#cols').value = String(S.cols || 0);
@@ -200,7 +215,7 @@
   // Drag the title bar: the window follows the pointer. Drop it on another window to swap places, or on free space to put it there.
   function startMove(e, t, el, handle) {
     e.preventDefault(); handle.setPointerCapture(e.pointerId);
-    dragging = true; el.classList.add('active'); push();
+    dragging = true; el.classList.add('active'); freezeWeb();
     const W = grid.clientWidth, H = grid.clientHeight, gr = grid.getBoundingClientRect();
     const start = { ...t.box }, px = e.clientX, py = e.clientY;
     const others = visibleTiles().filter((x) => x.id !== t.id);
@@ -221,7 +236,7 @@
       if (th !== target) { if (target) elOf(target)?.classList.remove('target'); target = th; if (target) elOf(target)?.classList.add('target'); }
     };
     handle.onpointerup = () => {
-      handle.onpointermove = handle.onpointerup = null; dragging = false; hint.remove();
+      handle.onpointermove = handle.onpointerup = null; dragging = false; hint.remove(); el.classList.remove('active'); thawWeb();
       if (zone) { snapWindow(t, zone); return; }
       if (target) { const tb = target.box; target.box = { ...start }; t.box = { ...tb }; }
       else {
@@ -230,7 +245,7 @@
         if (!free(b)) { let lo = 0, hi = 1; for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2, c = { ...start, x: start.x + (cur.x - start.x) * m, y: start.y + (cur.y - start.y) * m }; if (free(c)) lo = m; else hi = m; } b = { ...start, x: start.x + (cur.x - start.x) * lo, y: start.y + (cur.y - start.y) * lo }; }
         t.box = snapBox(b, others.map((o) => o.box), W, H);
       }
-      S.auto = false; save(); render();
+      S.auto = false; save(); relayout();
     };
   }
   function snapBox(b, boxes, W, H) {
@@ -246,7 +261,7 @@
 
   function startResize(e, t, el, mode, handle) {
     e.preventDefault(); handle.setPointerCapture(e.pointerId);
-    dragging = true; el.classList.add('active'); push();
+    dragging = true; el.classList.add('active'); freezeWeb();
     const W = grid.clientWidth, H = grid.clientHeight;
     const start = { ...t.box }, px = e.clientX, py = e.clientY;
     const others = visibleTiles().filter((x) => x.id !== t.id).map((x) => x.box);
@@ -269,7 +284,7 @@
       use = { x: Math.max(0, use.x), y: Math.max(0, use.y), w: use.w, h: use.h };
       last = use; t.box = use; place(el, use);
     };
-    handle.onpointerup = () => { handle.onpointermove = handle.onpointerup = null; el.classList.remove('active'); dragging = false; S.auto = false; save(); push(); };
+    handle.onpointerup = () => { handle.onpointermove = handle.onpointerup = null; el.classList.remove('active'); dragging = false; S.auto = false; save(); push(); thawWeb(); };
   }
 
   // ---------- layout presets and half-screen snapping ----------
@@ -290,7 +305,7 @@
     t.box = { ...ZONES[zone] };
     if (!others.length) t.box = { x: 0, y: 0, w: 1, h: 1 };
     else { const vert = zone === 'left' || zone === 'right'; tileIn(COMPLEMENT[zone], others, vert ? (others.length > 4 ? 2 : 1) : (others.length > 4 ? Math.ceil(others.length / 2) : others.length)); }
-    S.auto = false; save(); render();
+    S.auto = false; save(); relayout();
   }
   function applyLayout(kind) {
     const vis = visibleTiles(); if (!vis.length) return;
@@ -304,7 +319,7 @@
     else if (kind === 'main-left-66') { main.box = { x: 0, y: 0, w: 2 / 3, h: 1 }; stack({ x: 2 / 3, y: 0, w: 1 / 3, h: 1 }); }
     else if (kind === 'main-right-50') { main.box = { x: 0.5, y: 0, w: 0.5, h: 1 }; stack({ x: 0, y: 0, w: 0.5, h: 1 }); }
     else if (kind === 'main-top-50') { main.box = { x: 0, y: 0, w: 1, h: 0.5 }; tileIn({ x: 0, y: 0.5, w: 1, h: 0.5 }, rest, rest.length); }
-    S.auto = false; max = null; save(); render();
+    S.auto = false; const wasMax = !!max; max = null; save(); wasMax ? render() : relayout();
   }
   api.on('layout:apply', ({ kind }) => applyLayout(kind));
 

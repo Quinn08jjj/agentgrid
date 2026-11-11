@@ -38,6 +38,7 @@ input:focus, select:focus { border-color:var(--hi); }
 .tile:hover .th button, .tile.active .th button { opacity:1; }
 .th button:hover { background:var(--hi); color:#000; }
 .body { flex:1; min-height:0; }
+.body.frozen { background-size:100% 100%; background-repeat:no-repeat; background-color:#000; }
 .body.term { padding:4px 0 0 6px; background:#000; }
 .body.term .xterm { height:100%; }
 .body.term .xterm-viewport { background:transparent !important; }

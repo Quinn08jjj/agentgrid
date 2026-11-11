@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('grid', {
   save: (s) => ipcRenderer.send('state:save', s),
   sync: (p) => ipcRenderer.send('sync', p),
   cmd: (p) => ipcRenderer.send('tile:cmd', p),
+  snap: (id) => ipcRenderer.invoke('tile:snap', id),
   layoutMenu: (p) => ipcRenderer.send('menu:layout', p),
   debug: !!process.env.AGENTGRID_DEBUG,
   addMenu: (p) => ipcRenderer.send('menu:add', p),
