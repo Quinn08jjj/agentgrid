@@ -1,13 +1,13 @@
 {
   "name": "agentgrid",
   "productName": "AgentGrid",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Run many Claude Code, Codex, Kimi, DeepSeek, GLM, Qwen and Ollama coding agents side by side, each with its own account. A minimal tiling terminal for macOS.",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/renderer.js",
-    "build": "electron-packager . AgentGrid --platform=darwin --arch=arm64 --out=dist --overwrite --ignore=\"^/(dist|docs|vscode|\\.github)\" --asar.unpackDir=node_modules/node-pty",
+    "build": "electron-packager . AgentGrid --icon=build/icon.icns --platform=darwin --arch=arm64 --out=dist --overwrite --ignore=\"^/(dist|docs|build|vscode|\\.github)\" --asar.unpackDir=node_modules/node-pty",
     "postinstall": "node scripts/fix-pty-perms.js"
   },
   "keywords": [

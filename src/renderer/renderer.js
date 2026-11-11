@@ -20,7 +20,8 @@
   });
   S.tiles.forEach((t) => { t.zoom = t.zoom || 1; });
 
-  let modal = false, dragging = false, max = null;
+  let modal = false, dragging = false, max = null, splash = true;
+  setTimeout(() => { $('#splash').classList.add('out'); splash = false; push(); setTimeout(() => $('#splash').remove(), 600); }, 2000);
   const hidden = new Set();
   const info = {};
   const terms = {};
@@ -438,7 +439,7 @@
     const tiles = web.map((t) => {
       const el = grid.querySelector(`.tile[data-id="${t.id}"] .body`);
       const r = el ? el.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
-      return { id: t.id, url: t.url, zoom: t.zoom, visible: !!el && !modal && !dragging, rect: { x: r.left, y: r.top, w: r.width, h: r.height } };
+      return { id: t.id, url: t.url, zoom: t.zoom, visible: !!el && !modal && !dragging && !splash, rect: { x: r.left, y: r.top, w: r.width, h: r.height } };
     });
     api.sync({ tiles, ids: web.map((t) => t.id) });
   }
