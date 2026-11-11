@@ -70,7 +70,7 @@ function ensureView(t) {
   if (v) return v;
   const ses = session.fromPartition(partitionOf(t.id));
   ses.setUserAgent(chromeUA());
-  v = new WebContentsView({ webPreferences: { session: ses, contextIsolation: true, sandbox: true, spellcheck: true } });
+  v = new WebContentsView({ webPreferences: { session: ses, contextIsolation: true, sandbox: true, spellcheck: true, backgroundThrottling: false } });
   const wc = v.webContents;
   wc.setUserAgent(chromeUA());
   wc.setWindowOpenHandler(({ url }) => {
@@ -110,8 +110,17 @@ ipcMain.on('sync', (_e, { tiles, ids }) => {
   for (const id of [...views.keys()]) if (!ids.includes(id)) removeView(id);
   for (const t of tiles) {
     const v = ensureView(t);
-    v.setVisible(!!t.visible && t.rect.w > 20 && t.rect.h > 20);
-    v.setBounds({ x: Math.round(t.rect.x), y: Math.round(t.rect.y), width: Math.max(0, Math.round(t.rect.w)), height: Math.max(0, Math.round(t.rect.h)) });
+    const show = !!t.visible && t.rect.w > 20 && t.rect.h > 20;
+    const b = { x: Math.round(t.rect.x), y: Math.round(t.rect.y), width: Math.max(0, Math.round(t.rect.w)), height: Math.max(0, Math.round(t.rect.h)) };
+    const wasShown = v.__shown; v.__shown = show;
+    v.setVisible(show);
+    v.setBounds(b);
+    if (show && !wasShown) {
+      // a view that was hidden can come back as a black rectangle: nudge the size and force a repaint
+      v.setBounds({ ...b, width: b.width + 1 });
+      setTimeout(() => { if (views.get(t.id) === v && !v.webContents.isDestroyed()) { v.setBounds(b); v.webContents.invalidate(); } }, 40);
+      setTimeout(() => { if (views.get(t.id) === v && !v.webContents.isDestroyed()) v.webContents.invalidate(); }, 300);
+    }
     if (t.zoom && Math.abs(v.webContents.getZoomFactor() - t.zoom) > 0.001) v.webContents.setZoomFactor(t.zoom);
   }
 });
