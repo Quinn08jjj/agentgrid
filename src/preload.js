@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('grid', {
   save: (s) => ipcRenderer.send('state:save', s),
   sync: (p) => ipcRenderer.send('sync', p),
   cmd: (p) => ipcRenderer.send('tile:cmd', p),
+  layoutMenu: (p) => ipcRenderer.send('menu:layout', p),
+  debug: !!process.env.AGENTGRID_DEBUG,
   addMenu: (p) => ipcRenderer.send('menu:add', p),
   remove: (p) => ipcRenderer.invoke('tile:remove', p),
   setKey: (p) => ipcRenderer.send('key:set', p),

@@ -68,3 +68,23 @@ input:focus, select:focus { border-color:var(--hi); }
 .chat .pr { color:var(--hi); line-height:1.55; }
 .chat textarea { flex:1; resize:none; background:transparent; border:0; outline:0; color:var(--hi); font:inherit; line-height:1.55; padding:0; user-select:text; min-height:18px; }
 .chat textarea::placeholder { color:var(--dim); }
+
+/* agents dock (overview + broadcast) */
+body.dock #grid { right:300px; }
+#dock { position:absolute; top:40px; right:0; bottom:0; width:300px; border-left:1px solid var(--line); background:#000; display:flex; flex-direction:column; z-index:7; }
+#dockhead { display:flex; justify-content:space-between; padding:8px 12px; border-bottom:1px solid var(--line); color:var(--dim); }
+#alist { flex:1; overflow-y:auto; }
+.arow { display:grid; grid-template-columns:18px 14px 1fr; gap:6px; padding:7px 12px; border-bottom:1px solid #111; align-items:start; cursor:pointer; }
+.arow:hover { background:#0d0d0d; }
+.arow .st { color:var(--dim); } .arow .st.w { color:var(--hi); animation:b 1s steps(2) infinite; } .arow .st.x { color:#a33; }
+.arow .nm2 { color:var(--hi); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.arow .sub { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:11px; }
+.arow input[type=checkbox] { appearance:none; width:11px; height:11px; border:1px solid var(--dim); padding:0; margin-top:4px; cursor:pointer; }
+.arow input[type=checkbox]:checked { background:var(--hi); border-color:var(--hi); }
+#dockfoot { border-top:1px solid var(--line); padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+#orch { width:100%; resize:none; background:#000; color:var(--hi); border:1px solid var(--line); font:inherit; padding:6px; user-select:text; outline:0; }
+#orch:focus { border-color:var(--hi); }
+#dockfoot .row { justify-content:space-between; }
+#onote { color:var(--dim); min-height:14px; }
+#snaphint { position:absolute; z-index:15; border:1px dashed var(--hi); background:rgba(255,255,255,.06); pointer-events:none; display:none; }
+.tile.flash .in { border-color:var(--hi); box-shadow:inset 0 0 0 1px var(--hi); }

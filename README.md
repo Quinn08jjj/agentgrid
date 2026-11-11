@@ -8,7 +8,7 @@
 **Run many AI coding agents side by side — each with its own account.**
 Claude Code, Codex and chat windows for DeepSeek, Kimi, GLM, Qwen, Grok, OpenAI, Anthropic and local Ollama models in one minimal black-and-white tiling workspace for macOS. No logging out, no account switching, no extra VS Code windows.
 
-![AgentGrid with DeepSeek, Kimi and GLM chat windows next to a Codex window](docs/screenshot.png)
+![AgentGrid: DeepSeek and Kimi chat windows, a Codex window and the agents overview with broadcast](docs/screenshot.png)
 
 ## Why
 
@@ -26,6 +26,9 @@ AgentGrid gives every window its **own isolated login** and lets you drag them i
 - **Coding agents with any provider** — the same providers can also run as an [opencode](https://opencode.ai) agent that reads and edits files in your project folder.
 - **Chat websites as tiles too** — Claude, ChatGPT, Kimi, Qwen, DeepSeek, GLM, Gemini, Grok, Perplexity, Le Chat or any URL. Every site tile has its own persistent cookie jar, so the same site can be open with several accounts.
 - **Free-form windows** — drag a title bar to move a window and drop it on another one to swap places; drag any edge or corner to resize just that window. Windows snap to neighbours and borders and never overlap. One click re-tiles everything into a grid.
+- **Layouts and half-screen snapping** — the *layout* menu arranges windows as columns, rows, or a main window (50 % or 66 %) with the rest stacked beside it. Drag a window to the edge of the work area to snap it to that half; all other windows re-tile into the remaining half.
+- **Agents overview + orchestration** — the *agents* panel lists every window with its type, model and activity (working / idle / exited). Tick any agents and send one prompt to all of them at once (pasted into terminals, sent as a message to chat windows), or forward the last answer of one chat to the others. Handy for comparing models or fanning out a task.
+- **Plain terminal windows** — a normal login shell in any folder, next to your agents.
 - Maximize/hide per window, per-window text zoom, auto grid or fixed column count.
 - **Keys stay local** — API keys are encrypted with the macOS keychain (Electron `safeStorage`). No telemetry, no server.
 - Minimal by design: black, white, monospace.
@@ -34,6 +37,7 @@ AgentGrid gives every window its **own isolated login** and lets you drag them i
 
 | Window | What it is | Account / auth |
 |---|---|---|
+| Terminal | plain login shell in a folder | none |
 | Claude Code | the real `claude` CLI | Subscription login (separate config folder per window) |
 | Codex | the real `codex` CLI | ChatGPT login (separate `CODEX_HOME` per window) |
 | Chat · DeepSeek, Kimi, GLM, Qwen, Grok, OpenAI | native chat window, direct API calls | API key |
@@ -64,7 +68,8 @@ Requirements: macOS, Node 20+ (source builds). Claude Code must be installed for
 1. Click **+ new** and pick an agent.
 2. For Claude Code / Codex choose *New separate login* (own folder → own account) or *Existing login*, then pick the project folder.
 3. For *Chat via API key* enter name and key, then choose the model from the list. For *Coding agent via API key* you additionally pick the project folder.
-4. Drag a window's title bar to move it (drop it on another window to swap), its edges or corners to resize it. The **⋯** menu has rename, text size, settings. **tile** re-arranges everything into a grid.
+4. Open **agents** (top bar) to see all windows and broadcast a prompt to the ones you tick; **layout** gives presets such as *main window 50 % + others stacked*.
+5. Drag a window's title bar to move it (drop it on another window to swap), its edges or corners to resize it. The **⋯** menu has rename, text size, settings. **tile** re-arranges everything into a grid.
 
 ### Open it from VS Code
 

@@ -10,10 +10,21 @@
   <button id="add">+ new</button>
   <label class="grp">cols <select id="cols"><option value="0">auto</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
   <button id="tile" title="arrange all windows in a grid">tile</button>
+  <button id="layoutbtn" title="layout presets">layout ▾</button>
+  <button id="agentsbtn" title="overview of all agents + broadcast">agents</button>
   <span id="chips"></span>
   <button id="restoreAll" hidden>show all</button>
 </div>
 <div id="grid"></div>
+<aside id="dock" hidden>
+  <div id="dockhead"><span>agents</span><span id="dockcount"></span></div>
+  <div id="alist"></div>
+  <div id="dockfoot">
+    <textarea id="orch" rows="3" placeholder="send to the selected agents…  (enter = send, shift+enter = new line)" spellcheck="false"></textarea>
+    <div class="row"><button id="selall">all</button><button id="selnone">none</button><button id="osend">send</button></div>
+    <div id="onote"></div>
+  </div>
+</aside>
 <div id="empty" hidden><pre>no windows.
 
 each window is a real terminal or website

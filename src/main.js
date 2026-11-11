@@ -159,7 +159,7 @@ ipcMain.on('pty:start', (_e, t) => {
     });
   }
   let dir = cwd; try { fs.accessSync(dir); } catch { dir = os.homedir(); }
-  const p = pty.spawn(process.env.SHELL || '/bin/zsh', ['-ilc', agentCommand(kind)], { name: 'xterm-256color', cols: cols || 100, rows: rows || 30, cwd: dir, env });
+  const p = pty.spawn(process.env.SHELL || '/bin/zsh', kind === 'shell' ? ['-il'] : ['-ilc', agentCommand(kind)], { name: 'xterm-256color', cols: cols || 100, rows: rows || 30, cwd: dir, env });
   ptys.set(id, p);
   p.onData((data) => { if (win) win.webContents.send('pty:data', { id, data }); });
   p.onExit(({ exitCode }) => { ptys.delete(id); if (win) win.webContents.send('pty:exit', { id, exitCode }); });
@@ -252,9 +252,13 @@ ipcMain.on('menu:tile', (e, { id, type }) => {
   const common = [
     { label: 'Rename', click: act('rename') },
     { label: 'Text larger', click: act('zin') }, { label: 'Text smaller', click: act('zout') },
+    { label: 'Snap', submenu: [
+      { label: 'Left half', click: act('snap-left') }, { label: 'Right half', click: act('snap-right') },
+      { label: 'Top half', click: act('snap-top') }, { label: 'Bottom half', click: act('snap-bottom') },
+    ] },
     { type: 'separator' }, { label: 'Hide window', click: act('hide') },
   ];
-  const own = type === 'chat' ? [{ label: 'New chat (clear)', click: act('clear') }, { label: 'Settings (model / key / url)…', click: act('cfg') }]
+  const own = type === 'chat' ? [{ label: 'Send last answer to selected agents', click: act('forward') }, { label: 'New chat (clear)', click: act('clear') }, { label: 'Settings (model / key / url)…', click: act('cfg') }]
     : type === 'agent' ? [{ label: 'Restart', click: act('restart') }, { label: 'Settings (model / key / url)…', click: act('cfg') }]
     : type === 'term' ? [{ label: 'Restart', click: act('restart') }]
     : [{ label: 'Back', click: act('back') }, { label: 'Reload', click: act('reload') }, { label: 'Home', click: act('home') }, { label: 'Open in browser', click: act('ext') }];
@@ -293,12 +297,33 @@ async function askAccount(e, kind) {
   e.sender.send('tile:addTerm', { kind, label, cwd: f.filePaths[0], fresh: r.response === 0, home: HOME_DIR });
 }
 
+async function askShell(e) {
+  const f = await dialog.showOpenDialog(win, { title: 'Start folder for the terminal', properties: ['openDirectory', 'createDirectory'], defaultPath: app.getPath('home') });
+  if (f.canceled || !f.filePaths[0]) return;
+  e.sender.send('tile:addTerm', { kind: 'shell', label: 'Terminal', cwd: f.filePaths[0], fresh: false, home: HOME_DIR });
+}
+
+ipcMain.on('menu:layout', (e, { x, y }) => {
+  const L = (kind) => () => e.sender.send('layout:apply', { kind });
+  Menu.buildFromTemplate([
+    { label: 'Grid (all equal)', click: L('grid') },
+    { label: 'Columns', click: L('cols') },
+    { label: 'Rows', click: L('rows') },
+    { type: 'separator' },
+    { label: 'Main window left 50% · others stacked right', click: L('main-left-50') },
+    { label: 'Main window left 66% · others stacked right', click: L('main-left-66') },
+    { label: 'Main window top 50% · others below', click: L('main-top-50') },
+    { label: 'Main window right 50% · others stacked left', click: L('main-right-50') },
+  ]).popup({ window: win, x: Math.round(x), y: Math.round(y) });
+});
+
 ipcMain.on('menu:add', (e, { x, y }) => {
   const withHome = (p) => ({ ...p, home: HOME_DIR });
   const tpl = [
     { label: 'Chat via API key', submenu: API_PRESETS.map((p) => ({ label: p.label, click: () => e.sender.send('tile:addChat', withHome(p)) })) },
     { label: 'Coding agent via API key (opencode)', submenu: API_PRESETS.filter((p) => p.id !== 'anthropic').map((p) => ({ label: p.label, click: () => e.sender.send('tile:addApi', withHome(p)) })) },
     { type: 'separator' },
+    { label: 'Terminal (plain shell)', click: () => askShell(e) },
     { label: 'Claude Code (subscription login)', click: () => askAccount(e, 'claude') },
     { label: 'Codex (ChatGPT login)', click: () => askAccount(e, 'codex') },
     { type: 'separator' },

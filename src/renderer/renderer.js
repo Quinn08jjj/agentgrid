@@ -7,7 +7,7 @@
   const uid = () => Math.random().toString(36).slice(2, 8);
   const isTerm = (t) => t.kind === 'term';
   const isChat = (t) => t.kind === 'chat';
-  const TOOL = { claude: 'claude code', codex: 'codex', opencode: 'opencode' };
+  const TOOL = { claude: 'claude code', codex: 'codex', opencode: 'opencode', shell: 'terminal' };
 
   // Older builds ran API providers through Claude Code. Convert those windows into plain chat windows (same stored key).
   S.tiles = S.tiles.map((t) => {
@@ -26,6 +26,8 @@
   const terms = {};
   const chatRef = {}; // id -> { log, ta }
   const chatBusy = {};
+  const lastData = {};   // id -> timestamp of last terminal output (activity indicator)
+  const sel = new Set(); // windows selected in the agents dock
   const save = () => api.save({ tiles: S.tiles.map((t) => (isChat(t) ? { ...t, msgs: (t.msgs || []).slice(-100) } : t)), cols: S.cols, auto: S.auto });
 
   // ---------- terminals ----------
@@ -120,7 +122,7 @@
     if (m._el) { paintMsg(m._el, m); const log = chatRef[id]?.log; if (log && log.scrollHeight - log.scrollTop - log.clientHeight < 80) log.scrollTop = log.scrollHeight; }
   });
   api.on('chat:done', ({ id }) => {
-    chatBusy[id] = false; setBusy(id, false);
+    chatBusy[id] = false; setBusy(id, false); renderDock();
     const m = lastMsg(id); if (m && m.role === 'assistant' && !m.content && !m.reasoning) { const t = S.tiles.find((x) => x.id === id); t.msgs.pop(); m._el?.remove(); }
     save();
   });
@@ -191,6 +193,7 @@
       if (isTerm(t)) mountTerm(t, body); else if (isChat(t)) { mountChat(t, body); el.querySelector('.ld').classList.toggle('on', !!chatBusy[t.id]); } else paintInfo(t.id);
     }
     chips();
+    renderDock();
     push();
   }
 
@@ -202,16 +205,24 @@
     const start = { ...t.box }, px = e.clientX, py = e.clientY;
     const others = visibleTiles().filter((x) => x.id !== t.id);
     const elOf = (o) => grid.querySelector(`.tile[data-id="${o.id}"]`);
-    let cur = { ...start }, target = null;
+    let cur = { ...start }, target = null, zone = null;
+    const hint = document.createElement('div'); hint.id = 'snaphint'; grid.appendChild(hint);
     handle.onpointermove = (ev) => {
       const x = Math.min(1 - start.w, Math.max(0, start.x + (ev.clientX - px) / W)), y = Math.min(1 - start.h, Math.max(0, start.y + (ev.clientY - py) / H));
       cur = { ...start, x, y }; place(el, cur);
       const fx = (ev.clientX - gr.left) / W, fy = (ev.clientY - gr.top) / H;
       const hit = others.find((o) => fx >= o.box.x && fx <= o.box.x + o.box.w && fy >= o.box.y && fy <= o.box.y + o.box.h) || null;
-      if (hit !== target) { if (target) elOf(target)?.classList.remove('target'); target = hit; if (target) elOf(target)?.classList.add('target'); }
+      // pointer at the border of the work area → snap to that half
+      const edge = 26;
+      const z = ev.clientX - gr.left < edge ? 'left' : gr.right - ev.clientX < edge ? 'right' : ev.clientY - gr.top < edge ? 'top' : gr.bottom - ev.clientY < edge ? 'bottom' : null;
+      zone = z;
+      if (z) { const r = ZONES[z]; hint.style.cssText = `display:block;left:${r.x * 100}%;top:${r.y * 100}%;width:${r.w * 100}%;height:${r.h * 100}%`; } else hint.style.display = 'none';
+      const th = z ? null : hit;
+      if (th !== target) { if (target) elOf(target)?.classList.remove('target'); target = th; if (target) elOf(target)?.classList.add('target'); }
     };
     handle.onpointerup = () => {
-      handle.onpointermove = handle.onpointerup = null; dragging = false;
+      handle.onpointermove = handle.onpointerup = null; dragging = false; hint.remove();
+      if (zone) { snapWindow(t, zone); return; }
       if (target) { const tb = target.box; target.box = { ...start }; t.box = { ...tb }; }
       else {
         const free = (b) => !others.some((o) => overlap(b, o.box));
@@ -261,6 +272,103 @@
     handle.onpointerup = () => { handle.onpointermove = handle.onpointerup = null; el.classList.remove('active'); dragging = false; S.auto = false; save(); push(); };
   }
 
+  // ---------- layout presets and half-screen snapping ----------
+  const ZONES = { left: { x: 0, y: 0, w: 0.5, h: 1 }, right: { x: 0.5, y: 0, w: 0.5, h: 1 }, top: { x: 0, y: 0, w: 1, h: 0.5 }, bottom: { x: 0, y: 0.5, w: 1, h: 0.5 } };
+  const COMPLEMENT = { left: ZONES.right, right: ZONES.left, top: ZONES.bottom, bottom: ZONES.top };
+  // lay `list` out inside `rect`; nc = number of columns (default ~square)
+  function tileIn(rect, list, nc) {
+    const n = list.length; if (!n) return;
+    nc = Math.min(nc || (n <= 2 ? n : Math.ceil(Math.sqrt(n))), n);
+    const nr = Math.ceil(n / nc);
+    list.forEach((t, i) => {
+      const r = Math.floor(i / nc), cnt = Math.min(nc, n - r * nc), c = i - r * nc;
+      t.box = { x: rect.x + (c / cnt) * rect.w, y: rect.y + (r / nr) * rect.h, w: rect.w / cnt, h: rect.h / nr };
+    });
+  }
+  function snapWindow(t, zone) {
+    const others = visibleTiles().filter((x) => x.id !== t.id);
+    t.box = { ...ZONES[zone] };
+    if (!others.length) t.box = { x: 0, y: 0, w: 1, h: 1 };
+    else { const vert = zone === 'left' || zone === 'right'; tileIn(COMPLEMENT[zone], others, vert ? (others.length > 4 ? 2 : 1) : (others.length > 4 ? Math.ceil(others.length / 2) : others.length)); }
+    S.auto = false; save(); render();
+  }
+  function applyLayout(kind) {
+    const vis = visibleTiles(); if (!vis.length) return;
+    const [main, ...rest] = vis, full = { x: 0, y: 0, w: 1, h: 1 };
+    const stack = (rect) => tileIn(rect, rest, rest.length > 4 ? 2 : 1);
+    if (kind === 'grid') { retile(); return; }
+    else if (kind === 'cols') tileIn(full, vis, vis.length);
+    else if (kind === 'rows') tileIn(full, vis, 1);
+    else if (!rest.length) main.box = { ...full };
+    else if (kind === 'main-left-50') { main.box = { x: 0, y: 0, w: 0.5, h: 1 }; stack({ x: 0.5, y: 0, w: 0.5, h: 1 }); }
+    else if (kind === 'main-left-66') { main.box = { x: 0, y: 0, w: 2 / 3, h: 1 }; stack({ x: 2 / 3, y: 0, w: 1 / 3, h: 1 }); }
+    else if (kind === 'main-right-50') { main.box = { x: 0.5, y: 0, w: 0.5, h: 1 }; stack({ x: 0, y: 0, w: 0.5, h: 1 }); }
+    else if (kind === 'main-top-50') { main.box = { x: 0, y: 0, w: 1, h: 0.5 }; tileIn({ x: 0, y: 0.5, w: 1, h: 0.5 }, rest, rest.length); }
+    S.auto = false; max = null; save(); render();
+  }
+  api.on('layout:apply', ({ kind }) => applyLayout(kind));
+
+  // ---------- agents dock: overview of every window + broadcast / orchestration ----------
+  const TYPE = (t) => (isChat(t) ? 'chat' : isTerm(t) ? TOOL[t.cmd] : 'website');
+  function statusOf(t) {
+    if (isChat(t)) return chatBusy[t.id] ? ['w', 'working'] : ['', 'idle'];
+    if (isTerm(t)) {
+      const rec = terms[t.id];
+      if (rec?.exited) return ['x', 'exited'];
+      if (!rec?.started) return ['', 'not started'];
+      return Date.now() - (lastData[t.id] || 0) < 2500 ? ['w', 'working'] : ['', 'idle'];
+    }
+    return info[t.id]?.loading ? ['w', 'loading'] : ['', 'open'];
+  }
+  function renderDock() {
+    const dock = $('#dock'); if (dock.hidden) return;
+    $('#dockcount').textContent = S.tiles.length + ' windows' + (sel.size ? ` · ${sel.size} selected` : '');
+    const list = $('#alist');
+    const html = S.tiles.map((t) => {
+      const [cls, label] = statusOf(t);
+      const sub = [TYPE(t), isChat(t) || (isTerm(t) && t.api) ? t.api.model : isTerm(t) ? t.cwd.split('/').slice(-2).join('/') : '', hidden.has(t.id) ? 'hidden' : '', label].filter(Boolean).join(' · ');
+      return `<div class="arow" data-id="${t.id}"><input type="checkbox" ${sel.has(t.id) ? 'checked' : ''}><span class="st ${cls}">${cls === 'x' ? '×' : cls === 'w' ? '●' : '○'}</span><div><div class="nm2">${esc(t.name)}</div><div class="sub">${esc(sub)}</div></div></div>`;
+    }).join('');
+    if (list.dataset.h !== html) { list.dataset.h = html; list.innerHTML = html || '<div class="arow"><span></span><span></span><div class="sub">no windows yet</div></div>'; }
+  }
+  $('#alist').addEventListener('click', (e) => {
+    const row = e.target.closest('.arow'); if (!row) return;
+    const id = row.dataset.id;
+    if (e.target.matches('input')) { e.target.checked ? sel.add(id) : sel.delete(id); renderDock(); return; }
+    if (hidden.has(id)) { hidden.delete(id); render(); }
+    const el = grid.querySelector(`.tile[data-id="${id}"]`); if (!el) return;
+    el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 900);
+    const t = S.tiles.find((x) => x.id === id);
+    if (isTerm(t)) terms[id]?.term.focus(); else if (isChat(t)) chatRef[id]?.ta.focus();
+  });
+  // Send one prompt to many agents: bracketed paste + Enter into terminals, a normal message into chat windows.
+  function orchSend(text, ids) {
+    let sent = 0, skipped = 0;
+    for (const id of ids) {
+      const t = S.tiles.find((x) => x.id === id); if (!t) continue;
+      if (isTerm(t) && terms[id] && !terms[id].exited && terms[id].started) { api.pty.input({ id, data: '\x1b[200~' + text + '\x1b[201~' }); setTimeout(() => api.pty.input({ id, data: '\r' }), 120); sent++; }
+      else if (isChat(t) && !chatBusy[id]) { sendChat(t, text); sent++; }
+      else skipped++;
+    }
+    return { sent, skipped };
+  }
+  function orchestrate() {
+    const ta = $('#orch'), text = ta.value.trim(); if (!text) return;
+    const ids = [...sel]; if (!ids.length) { $('#onote').textContent = 'select agents first (checkboxes) or press "all"'; return; }
+    const r = orchSend(text, ids);
+    $('#onote').textContent = `sent to ${r.sent}` + (r.skipped ? ` · skipped ${r.skipped} (busy / exited / website)` : '');
+    ta.value = '';
+  }
+  $('#osend').onclick = orchestrate;
+  $('#orch').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); orchestrate(); } };
+  $('#selall').onclick = () => { S.tiles.filter((t) => isTerm(t) || isChat(t)).forEach((t) => sel.add(t.id)); renderDock(); };
+  $('#selnone').onclick = () => { sel.clear(); renderDock(); };
+  const toggleDock = () => { const d = $('#dock'); d.hidden = !d.hidden; document.body.classList.toggle('dock', !d.hidden); S.dock = !d.hidden; save(); renderDock(); push(); };
+  $('#agentsbtn').onclick = toggleDock;
+  $('#layoutbtn').onclick = (e) => { const r = e.target.getBoundingClientRect(); api.layoutMenu({ x: r.left, y: r.bottom }); };
+  if (S.dock) { $('#dock').hidden = false; document.body.classList.add('dock'); }
+  setInterval(renderDock, 1000);
+
   // ---------- header / menu actions ----------
   function onHeaderClick(e, t) {
     const c = e.target.dataset.c; if (!c) return;
@@ -286,6 +394,13 @@
     else if (action === 'restart') restartPty(t);
     else if (action === 'cfg') editApi(t);
     else if (action === 'clear') { api.chat.stop({ id }); t.msgs = []; save(); render(); }
+    else if (action.startsWith('snap-')) snapWindow(t, action.slice(5));
+    else if (action === 'forward') {
+      const last = [...(t.msgs || [])].reverse().find((m) => m.role === 'assistant' && !m.error && m.content);
+      const ids = [...sel].filter((x) => x !== id);
+      if (!last) return; if (!ids.length) { $('#dock').hidden && toggleDock(); $('#onote').textContent = 'select the target agents first, then use "send last answer" again'; return; }
+      const r = orchSend(last.content, ids); $('#dock').hidden && toggleDock(); $('#onote').textContent = `forwarded to ${r.sent}` + (r.skipped ? ` · skipped ${r.skipped}` : '');
+    }
     else api.cmd({ id, cmd: action === 'ext' ? 'external' : action, url: t.url });
   });
 
@@ -415,7 +530,9 @@
     if (r && r.url) { const u = /^https?:\/\//.test(r.url) ? r.url : 'https://' + r.url; addWeb(r.name || new URL(u).hostname, u); }
   });
   api.on('tile:nav', (d) => { info[d.id] = d; paintInfo(d.id); });
-  api.on('pty:data', ({ id, data }) => terms[id]?.term.write(data));
+  api.on('pty:data', ({ id, data }) => { lastData[id] = Date.now(); terms[id]?.term.write(data); });
   api.on('pty:exit', ({ id }) => { const r = terms[id]; if (r) { r.exited = true; r.term.write('\r\n\x1b[90m[process exited - press any key to restart]\x1b[0m\r\n'); } });
   render();
+  renderDock();
+  if (api.debug) window.__ag = { applyLayout, snapWindow, orchSend, sel, S, terms, sendChat };
 })();
