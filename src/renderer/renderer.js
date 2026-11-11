@@ -21,7 +21,7 @@
   S.tiles.forEach((t) => { t.zoom = t.zoom || 1; });
 
   let modal = false, dragging = false, max = null, splash = true;
-  setTimeout(() => { $('#splash').classList.add('out'); splash = false; push(); setTimeout(() => $('#splash').remove(), 600); }, 2000);
+  setTimeout(() => { $('#splash').classList.add('out'); splash = false; push(); setTimeout(() => $('#splash').remove(), 600); }, 2300);
   const hidden = new Set();
   const info = {};
   const terms = {};
