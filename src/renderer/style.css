@@ -28,6 +28,8 @@ input:focus, select:focus { border-color:var(--hi); }
 .rz:hover { background:var(--hi); opacity:.5; }
 .tile.target .in { border-color:var(--hi); box-shadow:inset 0 0 0 1px var(--hi); }
 .tile.active { z-index:20; }
+#grid.moving .tile:not(.active), #grid.settle .tile, .tile.settle { transition:left .16s ease, top .16s ease, width .16s ease, height .16s ease; }
+.tile.active { will-change:left,top; }
 .th { cursor:grab; height:26px; flex:none; display:flex; align-items:center; gap:0; padding:0 0 0 10px; border-bottom:1px solid var(--line); }
 .th .ld { width:6px; height:6px; background:var(--hi); margin-right:8px; opacity:0; flex:none; }
 .th .ld.on { opacity:1; animation:b 1s steps(2) infinite; }

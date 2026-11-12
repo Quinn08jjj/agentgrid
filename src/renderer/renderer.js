@@ -56,8 +56,9 @@
     const rec = getTerm(t);
     if (!rec.term.element) rec.term.open(body); else body.appendChild(rec.term.element);
     body.classList.add('term');
-    const doFit = () => { try { rec.fit.fit(); } catch {} };
-    requestAnimationFrame(() => { doFit(); if (!rec.started) startPty(t, rec); rec.term.focus(); });
+    const fitNow = () => { try { rec.fit.fit(); } catch {} };
+    let ft = 0; const doFit = () => { clearTimeout(ft); ft = setTimeout(fitNow, 70); };
+    requestAnimationFrame(() => { fitNow(); if (!rec.started) startPty(t, rec); rec.term.focus(); });
     new ResizeObserver(doFit).observe(body);
   }
 
@@ -168,6 +169,7 @@
 
   // cheap re-layout: just move the existing elements (no remount, no black flash)
   function relayout() {
+    grid.classList.add('settle'); clearTimeout(relayout.t); relayout.t = setTimeout(() => grid.classList.remove('settle'), 220);
     for (const t of visibleTiles()) { const el = grid.querySelector(`.tile[data-id="${t.id}"]`); if (el) place(el, max ? { x: 0, y: 0, w: 1, h: 1 } : t.box); }
     renderDock(); push();
   }
@@ -213,79 +215,99 @@
     push();
   }
 
-  // Drag the title bar: the window follows the pointer. Drop it on another window to swap places, or on free space to put it there.
+  // Drag the title bar: the window sticks to the pointer; the window under the pointer slides into the free slot (live swap).
+  // Pointer at the border of the work area = snap to that half.
   function startMove(e, t, el, handle) {
     e.preventDefault(); handle.setPointerCapture(e.pointerId);
-    dragging = true; el.classList.add('active'); freezeWeb();
+    dragging = true; el.classList.add('active'); grid.classList.add('moving'); freezeWeb();
     const W = grid.clientWidth, H = grid.clientHeight, gr = grid.getBoundingClientRect();
     const start = { ...t.box }, px = e.clientX, py = e.clientY;
+    let slot = { ...start }, zone = null, moved = false, pend = null, swapT = 0;
     const others = visibleTiles().filter((x) => x.id !== t.id);
     const elOf = (o) => grid.querySelector(`.tile[data-id="${o.id}"]`);
-    let cur = { ...start }, target = null, zone = null;
     const hint = document.createElement('div'); hint.id = 'snaphint'; grid.appendChild(hint);
     handle.onpointermove = (ev) => {
+      if (!moved && Math.abs(ev.clientX - px) + Math.abs(ev.clientY - py) < 4) return;
+      moved = true;
       const x = Math.min(1 - start.w, Math.max(0, start.x + (ev.clientX - px) / W)), y = Math.min(1 - start.h, Math.max(0, start.y + (ev.clientY - py) / H));
-      cur = { ...start, x, y }; place(el, cur);
-      const fx = (ev.clientX - gr.left) / W, fy = (ev.clientY - gr.top) / H;
-      const hit = others.find((o) => fx >= o.box.x && fx <= o.box.x + o.box.w && fy >= o.box.y && fy <= o.box.y + o.box.h) || null;
-      // pointer at the border of the work area → snap to that half
+      place(el, { x, y, w: start.w, h: start.h });
       const edge = 26;
-      const z = ev.clientX - gr.left < edge ? 'left' : gr.right - ev.clientX < edge ? 'right' : ev.clientY - gr.top < edge ? 'top' : gr.bottom - ev.clientY < edge ? 'bottom' : null;
-      zone = z;
-      if (z) { const r = ZONES[z]; hint.style.cssText = `display:block;left:${r.x * 100}%;top:${r.y * 100}%;width:${r.w * 100}%;height:${r.h * 100}%`; } else hint.style.display = 'none';
-      const th = z ? null : hit;
-      if (th !== target) { if (target) elOf(target)?.classList.remove('target'); target = th; if (target) elOf(target)?.classList.add('target'); }
+      zone = ev.clientX - gr.left < edge ? 'left' : gr.right - ev.clientX < edge ? 'right' : ev.clientY - gr.top < edge ? 'top' : gr.bottom - ev.clientY < edge ? 'bottom' : null;
+      if (zone) { const r = ZONES[zone]; hint.style.cssText = `display:block;left:${r.x * 100}%;top:${r.y * 100}%;width:${r.w * 100}%;height:${r.h * 100}%`; hint.style.display = 'block'; return; }
+      hint.style.display = 'none';
+      const fx = (ev.clientX - gr.left) / W, fy = (ev.clientY - gr.top) / H;
+      const hit = others.find((o) => fx >= o.box.x && fx <= o.box.x + o.box.w && fy >= o.box.y && fy <= o.box.y + o.box.h);
+      if (hit === pend) return;
+      clearTimeout(swapT); pend = hit;
+      // swap only when the pointer rests on a window briefly - passing over it does not shuffle everything
+      if (hit) swapT = setTimeout(() => { const tmp = { ...hit.box }; hit.box = { ...slot }; slot = tmp; const he = elOf(hit); if (he) place(he, hit.box); pend = null; }, 110);
     };
     handle.onpointerup = () => {
-      handle.onpointermove = handle.onpointerup = null; dragging = false; hint.remove(); el.classList.remove('active'); thawWeb();
-      if (zone) { snapWindow(t, zone); return; }
-      if (target) { const tb = target.box; target.box = { ...start }; t.box = { ...tb }; }
-      else {
-        const free = (b) => !others.some((o) => overlap(b, o.box));
-        let b = cur;
-        if (!free(b)) { let lo = 0, hi = 1; for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2, c = { ...start, x: start.x + (cur.x - start.x) * m, y: start.y + (cur.y - start.y) * m }; if (free(c)) lo = m; else hi = m; } b = { ...start, x: start.x + (cur.x - start.x) * lo, y: start.y + (cur.y - start.y) * lo }; }
-        t.box = snapBox(b, others.map((o) => o.box), W, H);
-      }
-      S.auto = false; save(); relayout();
+      handle.onpointermove = handle.onpointerup = null; clearTimeout(swapT); dragging = false; hint.remove(); grid.classList.remove('moving');
+      if (moved && zone) { el.classList.remove('active'); snapWindow(t, zone); thawWeb(); return; }
+      t.box = slot; el.classList.add('settle'); place(el, slot);
+      if (moved) { S.auto = false; save(); }
+      push(); renderDock(); thawWeb();
+      setTimeout(() => { el.classList.remove('settle', 'active'); }, 200);
     };
   }
-  function snapBox(b, boxes, W, H) {
-    const xs = [0, 1, ...boxes.flatMap((o) => [o.x, o.x + o.w])], ys = [0, 1, ...boxes.flatMap((o) => [o.y, o.y + o.h])];
-    const near = (v, lines, size) => lines.find((l) => Math.abs(v - l) * size < 10);
-    let { x, y } = b;
-    const nx = near(x, xs, W), nr = near(x + b.w, xs, W), ny = near(y, ys, H), nb = near(y + b.h, ys, H);
-    if (nx !== undefined) x = nx; else if (nr !== undefined) x = nr - b.w;
-    if (ny !== undefined) y = ny; else if (nb !== undefined) y = nb - b.h;
-    const out = { x: Math.max(0, Math.min(1 - b.w, x)), y: Math.max(0, Math.min(1 - b.h, y)), w: b.w, h: b.h };
-    return boxes.some((o) => overlap(out, o)) ? b : out;
-  }
 
+  // Resize one edge/corner. Neighbours that share the edge move with it (they shrink / grow),
+  // until they reach the minimum size - nothing "is in the way".
   function startResize(e, t, el, mode, handle) {
     e.preventDefault(); handle.setPointerCapture(e.pointerId);
     dragging = true; el.classList.add('active'); freezeWeb();
     const W = grid.clientWidth, H = grid.clientHeight;
     const start = { ...t.box }, px = e.clientX, py = e.clientY;
-    const others = visibleTiles().filter((x) => x.id !== t.id).map((x) => x.box);
-    const xs = [0, 1, ...others.flatMap((o) => [o.x, o.x + o.w])], ys = [0, 1, ...others.flatMap((o) => [o.y, o.y + o.h])];
-    const snap = (v, lines, size) => { for (const l of lines) if (Math.abs(v - l) * size < 10) return l; return v; };
-    const minW = 170 / W, minH = 100 / H;
-    const free = (b) => !others.some((o) => overlap(b, o));
-    const lerp = (a, b, k) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, w: a.w + (b.w - a.w) * k, h: a.h + (b.h - a.h) * k });
-    let last = { ...start };
-    handle.onpointermove = (ev) => {
+    const others = visibleTiles().filter((x) => x.id !== t.id).map((x) => ({ t: x, ob: { ...x.box } }));
+    const xs = [0, 1, ...others.flatMap((o) => [o.ob.x, o.ob.x + o.ob.w])], ys = [0, 1, ...others.flatMap((o) => [o.ob.y, o.ob.y + o.ob.h])];
+    const snap = (v, lines, size) => { for (const l of lines) if (Math.abs(v - l) * size < 8) return l; return v; };
+    const MIN = { w: 170 / W, h: 100 / H };
+    const elOf = (x) => grid.querySelector(`.tile[data-id="${x.id}"]`);
+    // move one side of `box` to `v`; mutates cur[] (the neighbours' boxes) and returns the clamped value
+    function side(box, sd, v, cur) {
+      const horiz = sd === 'e' || sd === 'w', pos = sd === 'e' || sd === 's';
+      const [P, L, Q, M] = horiz ? ['x', 'w', 'y', 'h'] : ['y', 'h', 'x', 'w'];
+      const min = horiz ? MIN.w : MIN.h;
+      const sEdge = pos ? start[P] + start[L] : start[P];
+      const qa = Math.min(box[Q], start[Q]), qb = Math.max(box[Q] + box[M], start[Q] + start[M]);
+      const cands = others.filter((o) => {
+        const ob = o.ob; if (!(ob[Q] < qb - EPS && ob[Q] + ob[M] > qa + EPS)) return false;
+        return pos ? ob[P] >= sEdge - EPS : ob[P] + ob[L] <= sEdge + EPS;
+      });
+      const touching = (ob) => Math.abs((pos ? ob[P] : ob[P] + ob[L]) - sEdge) < EPS;
+      v = snap(v, horiz ? xs : ys, horiz ? W : H);
+      // own minimum / work-area bounds
+      v = pos ? Math.min(1, Math.max(start[P] + min, v)) : Math.max(0, Math.min(start[P] + start[L] - min, v));
+      // neighbours' minimum
+      for (const o of cands) {
+        const ob = o.ob, hit = touching(ob) || (pos ? ob[P] < v - EPS : ob[P] + ob[L] > v + EPS);
+        if (!hit) continue;
+        v = pos ? Math.min(v, ob[P] + ob[L] - min) : Math.max(v, ob[P] + min);
+      }
+      for (const o of cands) {
+        const ob = o.ob, c = cur.get(o);
+        const hit = touching(ob) || (pos ? ob[P] < v - EPS : ob[P] + ob[L] > v + EPS);
+        if (!hit) continue;
+        if (pos) { c[P] = v; c[L] = ob[P] + ob[L] - v; } else { c[L] = v - ob[P]; }
+      }
+      if (pos) box[L] = v - box[P]; else { box[L] = start[P] + start[L] - v; box[P] = v; }
+      return v;
+    }
+    let frame = 0, ev0 = null;
+    const apply = () => {
+      frame = 0; const ev = ev0; if (!ev) return;
       const dx = (ev.clientX - px) / W, dy = (ev.clientY - py) / H;
-      let l = start.x, r = start.x + start.w, tp = start.y, bt = start.y + start.h;
-      if (mode.includes('w')) l = Math.min(r - minW, Math.max(0, snap(l + dx, xs, W)));
-      if (mode.includes('e')) r = Math.max(l + minW, Math.min(1, snap(r + dx, xs, W)));
-      if (mode.includes('n')) tp = Math.min(bt - minH, Math.max(0, snap(tp + dy, ys, H)));
-      if (mode.includes('s')) bt = Math.max(tp + minH, Math.min(1, snap(bt + dy, ys, H)));
-      const cand = { x: l, y: tp, w: r - l, h: bt - tp };
-      let use = cand;
-      if (!free(cand)) { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const m = (lo + hi) / 2; if (free(lerp(last, cand, m))) lo = m; else hi = m; } use = lerp(last, cand, lo); }
-      use = { x: Math.max(0, use.x), y: Math.max(0, use.y), w: use.w, h: use.h };
-      last = use; t.box = use; place(el, use);
+      const box = { ...start }, cur = new Map(others.map((o) => [o, { ...o.ob }]));
+      if (mode.includes('e')) side(box, 'e', start.x + start.w + dx, cur);
+      if (mode.includes('w')) side(box, 'w', start.x + dx, cur);
+      if (mode.includes('s')) side(box, 's', start.y + start.h + dy, cur);
+      if (mode.includes('n')) side(box, 'n', start.y + dy, cur);
+      t.box = box; place(el, box);
+      for (const o of others) { o.t.box = cur.get(o); const oe = elOf(o.t); if (oe) place(oe, o.t.box); }
     };
-    handle.onpointerup = () => { handle.onpointermove = handle.onpointerup = null; el.classList.remove('active'); dragging = false; S.auto = false; save(); push(); thawWeb(); };
+    handle.onpointermove = (ev) => { ev0 = ev; if (!frame) frame = requestAnimationFrame(apply); };
+    handle.onpointerup = () => { handle.onpointermove = handle.onpointerup = null; if (frame) { cancelAnimationFrame(frame); apply(); } el.classList.remove('active'); dragging = false; S.auto = false; save(); push(); renderDock(); thawWeb(); };
   }
 
   // ---------- layout presets and half-screen snapping ----------
